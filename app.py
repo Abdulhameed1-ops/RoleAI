@@ -1,14 +1,17 @@
 import streamlit as st
 import requests
 import time
-import uuid
+import os
 
-# ---------------- CONFIG ----------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
     page_title="RoleAI",
     page_icon="🤖",
     layout="centered"
 )
+
+# ---------------- API KEY (FROM SECRETS) ----------------
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 # ---------------- SESSION STATE ----------------
 if "messages" not in st.session_state:
@@ -18,23 +21,170 @@ if "ai_name" not in st.session_state:
     st.session_state.ai_name = "RoleAI"
 
 if "ai_role" not in st.session_state:
-    st.session_state.ai_role = "A helpful and friendly AI assistant"
+    st.session_state.ai_role = "A smart, calm, helpful AI that speaks clearly and politely."
 
-# ---------------- CSS (UI + ANIMATIONS) ----------------
+# ---------------- BACKGROUND ANIMATION (NO GLOBE) ----------------
 st.markdown("""
 <style>
 body {
-    background: radial-gradient(circle at top, #0f172a, #020617);
+    background: linear-gradient(-45deg, #020617, #020617, #0f172a, #020617);
+    background-size: 400% 400%;
+    animation: gradientMove 18s ease infinite;
     color: white;
 }
 
-/* floating background animation */
-.bg {
-    position: fixed;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-    overflow: hidden;
+@keyframes gradientMove {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* glass container */
+.container {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 24px;
+    padding: 18px;
+}
+
+/* chat bubbles */
+.chat {
+    max-width: 82%;
+    padding: 14px 18px;
+    margin: 10px 0;
+    border-radius: 18px;
+    line-height: 1.5;
+}
+
+.user {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    margin-left: auto;
+    text-align: right;
+}
+
+.ai {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* input */
+.input {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 14px;
+    border-radius: 18px;
+    color: white;
+}
+
+/* send button – unique style */
+.send {
+    background: linear-gradient(135deg, #22d3ee, #3b82f6);
+    border: none;
+    border-radius: 16px;
+    padding: 14px 22px;
+    color: #020617;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.send:hover {
+    opacity: 0.85;
+}
+
+/* thinking animation */
+.thinking span {
+    animation: blink 1.4s infinite both;
+}
+
+.thinking span:nth-child(2) { animation-delay: .2s; }
+.thinking span:nth-child(3) { animation-delay: .4s; }
+
+@keyframes blink {
+    0% { opacity: .2; }
+    20% { opacity: 1; }
+    100% { opacity: .2; }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------- SETTINGS ----------------
+with st.expander("⚙️ AI Settings"):
+    st.session_state.ai_name = st.text_input("AI Name", st.session_state.ai_name)
+    st.session_state.ai_role = st.text_area(
+        "AI Role / Personality",
+        st.session_state.ai_role,
+        height=120
+    )
+
+# ---------------- HEADER ----------------
+st.markdown(f"""
+<div class="container">
+<h2 style="text-align:center;">🤖 {st.session_state.ai_name}</h2>
+<p style="text-align:center;opacity:0.75;">
+{st.session_state.ai_role}
+</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ---------------- CHAT DISPLAY ----------------
+for msg in st.session_state.messages:
+    cls = "user" if msg["role"] == "user" else "ai"
+    st.markdown(
+        f"<div class='chat {cls}'>{msg['content']}</div>",
+        unsafe_allow_html=True
+    )
+
+# ---------------- INPUT ----------------
+with st.form("chat", clear_on_submit=True):
+    user_text = st.text_input("", placeholder="Say something...", key="input")
+    sent = st.form_submit_button("Speak")
+
+# ---------------- AI CHAT (COHERE CHAT MODEL) ----------------
+if sent and user_text.strip():
+    st.session_state.messages.append({
+        "role": "user",
+        "content": user_text
+    })
+
+    thinking = st.empty()
+    thinking.markdown(
+        "<div class='chat ai thinking'>Thinking<span>.</span><span>.</span><span>.</span></div>",
+        unsafe_allow_html=True
+    )
+
+    headers = {
+        "Authorization": f"Bearer {COHERE_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": "command-r",
+        "message": user_text,
+        "preamble": f"You are {st.session_state.ai_name}. {st.session_state.ai_role}",
+        "temperature": 0.6
+    }
+
+    try:
+        res = requests.post(
+            "https://api.cohere.ai/v1/chat",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+
+        ai_reply = res.json()["text"]
+
+    except Exception:
+        ai_reply = "⚠️ I couldn't respond right now."
+
+    thinking.empty()
+
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": ai_reply
+    })
+
+    st.rerun()    overflow: hidden;
 }
 
 .bg span {
