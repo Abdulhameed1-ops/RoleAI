@@ -162,7 +162,7 @@ if send and user_text.strip():
     }
 
     payload = {
-        "model": "command",
+        "model": "command-a-03-2025",
         "message": user_text,
         "preamble": f"You are {st.session_state.ai_name}. {st.session_state.ai_role}",
         "temperature": 0.6
