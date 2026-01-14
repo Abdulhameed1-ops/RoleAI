@@ -1,39 +1,78 @@
 import streamlit as st
-import requests
-import os
-from PyPDF2 import PdfReader
-from docx import Document
-from io import BytesIO
-import pyttsx3
-import tempfile
+import cv2
+import dlib
+import numpy as np
+from imutils import face_utils
 
+# Load dlib's face detector and facial landmark predictor
+detector = dlib.get_frontal_face_detector()
+predictor_path = "shape_predictor_68_face_landmarks.dat"
+predictor = dlib.shape_predictor(predictor_path)
 
-# Function to extract text from PDF
-def extract_text_from_pdf(file):
-    reader = PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
-    return text
+st.title("Live Face Detection and Facial Landmark Tuning App")
 
+# Sidebar controls for tuning
+st.sidebar.header("Tuning Parameters")
 
-# Function to extract text from DOCX
-def extract_text_from_docx(file):
-    doc = Document(file)
-    text = ""
-    for para in doc.paragraphs:
-        text += para.text + "\n"
-    return text
+upsample_num = st.sidebar.slider("Upsample Number (face detector)", 0, 3, 1)
+landmark_color = st.sidebar.color_picker("Landmark Color", "#00FF00")
+landmark_radius = st.sidebar.slider("Landmark Radius", 1, 10, 2)
+landmark_thickness = st.sidebar.slider("Landmark Thickness", 1, 5, 1)
 
+# Webcam input checkbox
+use_webcam = st.sidebar.checkbox("Use Webcam", value=True)
 
-# Function to call Cohere API for text summarization or conversion to podcast-like text
-def generate_podcast_text(text):
-    api_key = 'bf5Qur8XrFgfmiAoU0KL111qbVud0P2KGQFZvdW8'  # Replace with your Cohere API key
-    url = "https://api.cohere.ai/chat",
-          "Authorization": f"Bearer {api_key}",
-          "Content-Type": "application/json"
-    }
-    
+if use_webcam:
+    # Open webcam
+    cap = cv2.VideoCapture(0)
+    FRAME_WINDOW = st.image([])
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            st.error("Failed to capture video")
+            break
+
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        faces = detector(frame_rgb, upsample_num)
+
+        for face in faces:
+            shape = predictor(frame_rgb, face)
+            shape = face_utils.shape_to_np(shape)
+
+            for (x, y) in shape:
+                cv2.circle(frame_rgb, (x, y), landmark_radius,
+                           tuple(int(landmark_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)),
+                           landmark_thickness)
+
+        FRAME_WINDOW.image(frame_rgb)
+
+    cap.release()
+else:
+    st.write("Please upload an image to detect faces and landmarks.")
+    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+
+    if uploaded_file is not None:
+        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+        image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        st.image(image_rgb, caption="Uploaded Image", use_column_width=True)
+
+        faces = detector(image_rgb, upsample_num)
+        st.write(f"Number of faces detected: {len(faces)}")
+
+        for face in faces:
+            shape = predictor(image_rgb, face)
+            shape = face_utils.shape_to_np(shape)
+
+            for (x, y) in shape:
+                cv2.circle(image_rgb, (x, y), landmark_radius,
+                           tuple(int(landmark_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)),
+                           landmark_thickness)
+
+        st.image(image_rgb, caption="Image with Facial Landmarks", use_column_width=True)
     # 2025 model (latest)
     payload = {
         "model": "command-xlarge-2025",  # Replace with the latest model if needed
